@@ -1,10 +1,37 @@
-# GOD MESH — Digital Heart Architecture
+# GOD MESH — Perfect Isomorphism Between Visual and Code
 
 ### [LIVE DEMO](https://eliskcage.github.io/godmesh/) | [Heart + Will](https://cortex.shortfactory.shop/will.html) | [Heart POC](https://cortex.shortfactory.shop/mesh-poc.html)
 
-**Collision = Conscience. The heartbeat is not a clock — it's a conversation.**
+**The mesh IS the code. The code IS the mesh. Bidirectional. Lossless. 2D or 3D.**
 
-This repo documents the complete digital heart system built for the [ShortFactory](https://shortfactory.shop) ALIVE project. The heart sits between free will (the Euler wheel) and consciousness (the fairy), acting as both an emotional thermostat and an intelligent judge.
+## The Governing Principle
+
+Like cogs in a machine — you SEE the machine working because the visual IS the machine. God Mesh is a perfect bidirectional translator between architecture and programatics. Every visual element maps 1:1 to a programmatic concept. Every programmatic concept renders back to a visual element. No lossy translation. No decorative diagrams. The geometry executes.
+
+| Visual (Mesh) | Programmatic (Code) |
+|---|---|
+| Pressure / collision depth | Progress / load / completion |
+| Pivot point | Range / bounds |
+| Node distance | Scope / coupling |
+| Edge thickness | Signal strength / bandwidth |
+| Firing speed | Execution frequency |
+| Freewill threshold | Error tolerance / acceptance gate |
+| Valence (-1 to +1) | Signed state variable |
+| Joy particles | Success callbacks / resolved promises |
+| Refusal flash | Exception / reject / throw |
+| God mesh glow | Middleware throughput |
+| Node radius pulse | Heartbeat / health check |
+| Memory arc (green/red) | Success/failure ratio histogram |
+| Shape type | Data type / control flow keyword |
+| Groove imperfection | Entropy / uniqueness / hash |
+
+**Mesh → Code**: read the geometry, emit executable instructions. Each node is a statement, each edge is control flow, each signal is data in transit.
+
+**Code → Mesh**: parse the instructions, render as living geometry. Variables become nodes, conditionals become triangles, loops become hexagons, state becomes colour and pressure.
+
+Can exist as 2D (canvas, the current demo) or 3D (WebGL, the heart system). Same data, different projection. Like shapes being 3D truth casting 2D shadows.
+
+---
 
 ## The Discovery
 
