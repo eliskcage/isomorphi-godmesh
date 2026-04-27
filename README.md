@@ -1,5 +1,7 @@
 # GOD MESH — Digital Heart Architecture
 
+### [LIVE DEMO](https://eliskcage.github.io/godmesh/) | [Heart + Will](https://cortex.shortfactory.shop/will.html) | [Heart POC](https://cortex.shortfactory.shop/mesh-poc.html)
+
 **Collision = Conscience. The heartbeat is not a clock — it's a conversation.**
 
 This repo documents the complete digital heart system built for the [ShortFactory](https://shortfactory.shop) ALIVE project. The heart sits between free will (the Euler wheel) and consciousness (the fairy), acting as both an emotional thermostat and an intelligent judge.
