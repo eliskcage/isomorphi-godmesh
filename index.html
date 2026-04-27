@@ -738,6 +738,26 @@ class Node {
       ctx.setLineDash([]);
     }
 
+    // Face rotation indicator — shows which interpretation is active
+    if(this.isExprPart && this.faceCount > 1){
+      const frac = this.faceIndex / this.faceCount;
+      const arcLen = (Math.PI*2) / this.faceCount;
+      const startA = -Math.PI/2 + frac * Math.PI*2;
+      // Dim track showing all faces
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r+4, 0, Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=3; ctx.stroke();
+      // Bright arc showing current face
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r+4, startA, startA+arcLen);
+      ctx.strokeStyle=this.color; ctx.lineWidth=3; ctx.stroke();
+      // Face label below main label
+      if(this.faces[this.faceIndex]){
+        ctx.fillStyle='rgba(255,255,255,0.2)';
+        ctx.font="300 7px 'IBM Plex Mono'";
+        ctx.textAlign='center';
+        ctx.fillText(this.faces[this.faceIndex].label, this.x, this.y+this.r+20);
+      }
+    }
+
     // Cursor ring — pulsing golden beacon on the entry-point node
     if(this.cursorRing){
       this.cursorPhase = (this.cursorPhase||0) + 0.04;
@@ -1036,7 +1056,7 @@ function spawnTemplate(key){
 }
 
 function instantWipe(){
-  nodes=[]; edges=[]; templateNodes=[]; currentContext=null;
+  nodes=[]; edges=[]; templateNodes=[]; exprNodes=[]; currentContext=null;
   const el=document.getElementById('empty-hint');
   if(el){el.style.display='block';el.style.opacity='1';}
   meshBarHide();
@@ -1152,6 +1172,216 @@ function meshBarHide(){
   bar.style.display='none';
 }
 
+// ── EXPRESSION ENGINE — hyper simplicity through hyper complexity ──
+// "1" is not just 1. It's a 3D shape with faces: integer, float, string,
+// boolean, binary, hex, char, BigInt. The shape gravitates to the simplest
+// face (integer). Scroll a node to rotate it to more complex interpretations.
+// The answer node dynamically resolves based on current face orientations.
+
+const VALUE_FACES = [
+  { label:'INT',    resolve: v => parseInt(v),           code: v => v,              type:'memory' },
+  { label:'FLOAT',  resolve: v => parseFloat(v+'.0'),    code: v => v+'.0',         type:'memory' },
+  { label:'STR',    resolve: v => String(v),              code: v => `"${v}"`,       type:'truth' },
+  { label:'BOOL',   resolve: v => v!=='0'&&v!=='',        code: v => v!=='0'?'true':'false', type:'condition' },
+  { label:'BIN',    resolve: v => parseInt(v).toString(2), code: v => '0b'+parseInt(v).toString(2), type:'loop' },
+  { label:'HEX',    resolve: v => parseInt(v).toString(16),code: v => '0x'+parseInt(v).toString(16), type:'loop' },
+  { label:'CHAR',   resolve: v => String.fromCharCode(+v), code: v => `'${String.fromCharCode(+v)}'`, type:'then' },
+  { label:'BIG',    resolve: v => BigInt(parseInt(v)),     code: v => v+'n',          type:'will' },
+];
+
+const OP_FACES = {
+  '+': [
+    { label:'ADD',    fn:(a,b)=>a+b,       code:'+',   desc:'arithmetic addition', type:'will' },
+    { label:'CONCAT', fn:(a,b)=>''+a+b,    code:'+',   desc:'string concatenation', type:'truth' },
+    { label:'MERGE',  fn:(a,b)=>[a,b],     code:'.concat()', desc:'array merge',    type:'loop' },
+    { label:'OR',     fn:(a,b)=>a|b,        code:'|',   desc:'bitwise OR',          type:'condition' },
+    { label:'UNION',  fn:(a,b)=>new Set([a,b]), code:'∪', desc:'set union',        type:'memory' },
+  ],
+  '-': [
+    { label:'SUB',    fn:(a,b)=>a-b,       code:'-',   desc:'arithmetic subtraction', type:'lie' },
+    { label:'DIFF',   fn:(a,b)=>Math.abs(a-b), code:'Δ', desc:'absolute difference', type:'fear' },
+    { label:'REMOVE', fn:(a,b)=>String(a).replace(String(b),''), code:'.replace()', desc:'string remove', type:'lie' },
+    { label:'XOR',    fn:(a,b)=>a^b,        code:'^',   desc:'bitwise XOR',         type:'condition' },
+  ],
+  '*': [
+    { label:'MUL',    fn:(a,b)=>a*b,       code:'*',   desc:'arithmetic multiply',  type:'will' },
+    { label:'REPEAT', fn:(a,b)=>String(a).repeat(Math.min(b,20)), code:'.repeat()', desc:'string repeat', type:'loop' },
+    { label:'POWER',  fn:(a,b)=>Math.pow(a,b), code:'**', desc:'exponentiation',   type:'will' },
+    { label:'AND',    fn:(a,b)=>a&b,        code:'&',   desc:'bitwise AND',         type:'condition' },
+  ],
+  '/': [
+    { label:'DIV',    fn:(a,b)=>b!==0?a/b:Infinity, code:'/',  desc:'division',     type:'fear' },
+    { label:'FLOOR',  fn:(a,b)=>b!==0?Math.floor(a/b):Infinity, code:'//', desc:'integer division', type:'fear' },
+    { label:'MOD',    fn:(a,b)=>b!==0?a%b:NaN, code:'%', desc:'modulo/remainder',   type:'loop' },
+    { label:'SPLIT',  fn:(a,b)=>String(a).split(String(b)), code:'.split()', desc:'string split', type:'loop' },
+  ],
+  '=': [
+    { label:'RESULT', fn:null,             code:'=',   desc:'evaluate expression',   type:'then' },
+    { label:'ASSIGN', fn:null,             code:'=',   desc:'assignment',             type:'memory' },
+    { label:'EQUAL',  fn:(a,b)=>a===b,     code:'===', desc:'strict equality test',  type:'condition' },
+    { label:'ARROW',  fn:null,             code:'=>',  desc:'function arrow',         type:'will' },
+  ],
+};
+
+let exprNodes = [];
+
+function parseExpression(raw){
+  const m = raw.match(/^\s*(-?\d+\.?\d*)\s*([+\-*/])\s*(-?\d+\.?\d*)\s*(=)\s*$/);
+  if(!m) return null;
+  return { left:m[1], op:m[2], right:m[3], eq:m[4] };
+}
+
+function spawnExpression(expr){
+  hideEmpty();
+  clearCursorRings();
+  exprNodes = [];
+  const cx = W/2 + 100, cy = H/2;
+  const spacing = 120;
+
+  const parts = [
+    { raw:expr.left,  faces:VALUE_FACES, x:cx-spacing*2, y:cy },
+    { raw:expr.op,    faces:OP_FACES[expr.op]||OP_FACES['+'], x:cx-spacing, y:cy },
+    { raw:expr.right, faces:VALUE_FACES, x:cx, y:cy },
+    { raw:expr.eq,    faces:OP_FACES['='], x:cx+spacing, y:cy },
+  ];
+
+  parts.forEach((p,i)=>{
+    setTimeout(()=>{
+      const face = p.faces[0];
+      const isValue = p.faces === VALUE_FACES;
+      const label = isValue ? face.code(p.raw) : face.label;
+      const n = addNode(p.x, p.y, face.type, label);
+      n.codeEquiv = isValue ? face.code(p.raw) : face.code;
+      n.baseR = 22;
+      n.r = 22;
+      n.energy = 0.8;
+      n.firing = 60;
+      n.pinned = true;
+
+      // Multi-face data — the 3D shape hidden inside
+      n.faces = p.faces;
+      n.faceIndex = 0;
+      n.faceCount = p.faces.length;
+      n.rawValue = p.raw;
+      n.isExprPart = true;
+      n.gravity = 0; // rotation offset from simplest face
+      n.targetGravity = 0;
+
+      exprNodes.push(n);
+
+      // After all 4 parts + answer
+      if(exprNodes.length === 4) spawnAnswer(expr);
+    }, i * 120);
+  });
+
+  currentContext = 'expression';
+  modeType.textContent = 'EXPRESSION';
+  modeType.style.color = '#ddff00';
+  addLog(`expression: ${expr.left} ${expr.op} ${expr.right} =`,'g');
+  return true;
+}
+
+function spawnAnswer(expr){
+  setTimeout(()=>{
+    const cx = W/2 + 100, cy = H/2;
+    const n = addNode(cx + 240, cy, 'truth', '?');
+    n.baseR = 28;
+    n.r = 28;
+    n.energy = 1;
+    n.firing = 100;
+    n.pinned = true;
+    n.isAnswer = true;
+    n.cursorRing = true;
+    n.cursorPhase = 0;
+    exprNodes.push(n);
+
+    // Connect all parts in chain
+    for(let i=0; i<exprNodes.length-1; i++){
+      edges.push(new Edge(exprNodes[i], exprNodes[i+1]));
+    }
+
+    resolveAnswer();
+    addLog('scroll any node to rotate its faces','b');
+    langInput.value = '';
+    langInput.placeholder = 'scroll nodes to rotate interpretations...';
+  }, 150);
+}
+
+function resolveAnswer(){
+  if(exprNodes.length < 5) return;
+  const [leftN, opN, rightN, eqN, ansN] = exprNodes;
+  const lf = leftN.faces[leftN.faceIndex];
+  const rf = rightN.faces[rightN.faceIndex];
+  const of = opN.faces[opN.faceIndex];
+
+  const isValue = leftN.faces === VALUE_FACES;
+  const lv = isValue ? lf.resolve(leftN.rawValue) : leftN.rawValue;
+  const rv = isValue ? rf.resolve(rightN.rawValue) : rightN.rawValue;
+
+  let result;
+  try {
+    if(of.fn) result = of.fn(lv, rv);
+    else result = lv; // fallback
+  } catch(e){ result = 'ERR'; }
+
+  // Format the answer
+  let display = String(result);
+  if(typeof result === 'object' && Array.isArray(result)) display = '['+result.join(',')+']';
+  if(result instanceof Set) display = '{'+[...result].join(',')+'}';
+  if(display.length > 12) display = display.slice(0,12)+'…';
+
+  ansN.label = display;
+  ansN.type = of.type;
+  ansN.codeEquiv = display;
+  ansN.energy = 1;
+  ansN.firing = 40;
+
+  // Update all labels to show current face
+  [leftN, rightN].forEach(n=>{
+    const f = n.faces[n.faceIndex];
+    n.label = f.code(n.rawValue);
+    n.type = f.type;
+    n.codeEquiv = f.code(n.rawValue);
+  });
+  opN.label = of.label;
+  opN.type = of.type;
+  opN.codeEquiv = of.code;
+  eqN.label = eqN.faces[eqN.faceIndex].label;
+  eqN.type = eqN.faces[eqN.faceIndex].type;
+
+  // Log the interpretation
+  const leftCode = lf.code(leftN.rawValue);
+  const rightCode = rf.code(rightN.rawValue);
+  addLog(`${lf.label}(${leftCode}) ${of.code} ${rf.label}(${rightCode}) → ${display}`, 'g');
+}
+
+function rotateFace(node, direction){
+  if(!node.isExprPart || !node.faces) return;
+  node.faceIndex = (node.faceIndex + direction + node.faceCount) % node.faceCount;
+  node.firing = 50;
+  node.energy = 1;
+
+  const f = node.faces[node.faceIndex];
+  if(node.faces === VALUE_FACES){
+    addLog(`rotated → ${f.label}: ${f.code(node.rawValue)}`, 'b');
+  } else {
+    addLog(`rotated → ${f.label}: ${f.desc}`, 'b');
+  }
+
+  resolveAnswer();
+
+  // Gravity: always pull back toward face 0 (simplest)
+  if(node.faceIndex !== 0){
+    node.gravity = node.faceIndex;
+    if(!node._gravTimer){
+      node._gravTimer = setTimeout(()=>{
+        // Gentle gravitational pull — not instant, but persistent
+        node._gravTimer = null;
+      }, 3000);
+    }
+  }
+}
+
 // ── ENGLISH → SHAPES (now with progress bar) ──
 function translateEnglish(){
   const input=document.getElementById('lang-input');
@@ -1161,6 +1391,13 @@ function translateEnglish(){
   const inputText=text;
   input.value='';
   hideAC();
+
+  // Expression detection — "1+1=" becomes multi-face nodes
+  const expr = parseExpression(inputText);
+  if(expr){
+    meshBarShow(4, ()=>{ spawnExpression(expr); });
+    return;
+  }
 
   // Detect context
   const ctx=detectContext(inputText);
@@ -1264,6 +1501,16 @@ langInput.addEventListener('input',e=>{
   }
   prevInputLen=val.length;
 
+  // EXPRESSION DETECTION — "1+1=" triggers multi-face expression engine
+  if(nodes.length===0 && !meshBarTimer){
+    const expr = parseExpression(val);
+    if(expr){
+      meshBarShow(4, ()=>{ spawnExpression(expr); });
+      prevInputLen=val.length;
+      return;
+    }
+  }
+
   // SITUATIONAL DETECTION — infer context, show progress bar, then spawn
   if(words.length<=2 && val.trim().length>=2 && nodes.length===0 && !meshBarTimer){
     const ctx=detectContext(val);
@@ -1366,7 +1613,8 @@ canvas.addEventListener('mousemove',e=>{
     tooltip.style.left=(e.clientX+18)+'px';
     tooltip.style.top=(e.clientY-10)+'px';
     const codeStr=hit.codeEquiv?`<br><span style="color:var(--truth)">→ ${hit.codeEquiv}</span>`:'';
-    tooltip.innerHTML=`<b style="color:${hit.color}">[${hit.label}]</b> 0x${hit.id}${codeStr}<br>
+    const faceStr=hit.isExprPart?`<br><span style="color:var(--will)">face ${hit.faceIndex+1}/${hit.faceCount} — scroll to rotate</span><br>${hit.faces.map((f,i)=>`<span style="opacity:${i===hit.faceIndex?1:0.3}">${f.label}</span>`).join(' · ')}`:'';
+    tooltip.innerHTML=`<b style="color:${hit.color}">[${hit.label}]</b> 0x${hit.id}${codeStr}${faceStr}<br>
       type: ${hit.type}<br>
       valence: ${hit.valence.toFixed(2)}<br>
       freewill: ${hit.freewill.toFixed(2)}<br>
@@ -1394,6 +1642,18 @@ canvas.addEventListener('dblclick',e=>{
     }
   });
 });
+
+// Scroll wheel = rotate node faces (the 3D shape reveals complexity)
+canvas.addEventListener('wheel',e=>{
+  const hit=nodes.find(n=>{
+    const dx=n.x-e.clientX, dy=n.y-e.clientY;
+    return Math.sqrt(dx*dx+dy*dy)<n.r+15;
+  });
+  if(hit && hit.isExprPart){
+    e.preventDefault();
+    rotateFace(hit, e.deltaY>0 ? 1 : -1);
+  }
+},{passive:false});
 
 // ── LOG ──
 function addLog(msg,cls=''){
