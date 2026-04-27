@@ -268,12 +268,12 @@ body{
 <div id="autocomplete"></div>
 <div id="empty-hint">
   <h2>the mesh is empty</h2>
-  <p>type one word to build a whole page:<br>
-  <span style="color:rgba(221,255,0,0.15)">html</span> &nbsp; <span style="color:rgba(221,255,0,0.1)">page</span> &nbsp; <span style="color:rgba(221,255,0,0.1)">app</span> &nbsp; <span style="color:rgba(221,255,0,0.1)">website</span><br><br>
-  or describe what you need:<br>
-  "head body div button function if else loop"<br><br>
+  <p>type anything — the mesh figures out what you mean<br><br>
+  <span style="color:rgba(221,255,0,0.12)">html</span> &nbsp; <span style="color:rgba(51,153,255,0.15)">div</span> &nbsp; <span style="color:rgba(204,68,255,0.15)">function</span> &nbsp; <span style="color:rgba(0,255,170,0.12)">def</span> &nbsp; <span style="color:rgba(255,119,0,0.12)">$username</span> &nbsp; <span style="color:rgba(255,204,0,0.12)">select</span> &nbsp; <span style="color:rgba(68,255,204,0.12)">42</span><br><br>
+  <span style="color:rgba(255,255,255,0.06)">html → HTML page &nbsp;|&nbsp; $var → PHP &nbsp;|&nbsp; 42 → JS<br>
+  def → Python &nbsp;|&nbsp; select → SQL &nbsp;|&nbsp; flex → CSS</span><br><br>
   no syntax needed — the mesh handles the punctuation<br>
-  <span style="color:rgba(255,26,74,0.12)">backspace to empty = instant blank</span></p>
+  <span style="color:rgba(255,26,74,0.1)">backspace = instant blank</span></p>
 </div>
 <div id="mode">placing: <span id="mode-type">memory</span></div>
 
@@ -760,10 +760,11 @@ function exportCode(){
   addLog('IR exported','g');
 }
 
-// ── DECLARATION TEMPLATES ──
-// One word = entire page scaffold. The word IS the whole document.
-const DECLARATIONS = {
-  html:    { label:'HTML PAGE', nodes:[
+// ── SITUATIONAL TEMPLATES ──
+// The mesh infers the programming context from what you type.
+// User never picks a language — the mesh figures it out.
+const TEMPLATES = {
+  html: { label:'HTML PAGE', nodes:[
     {word:'HTML',     type:'will',     code:'<!DOCTYPE html><html>',  x:0,   y:-160, scale:2.5},
     {word:'HEAD',     type:'memory',   code:'<head>',     x:-120, y:-60,  scale:1.4},
     {word:'META',     type:'fear',     code:'<meta charset="UTF-8">', x:-200, y:20, scale:0.9},
@@ -773,24 +774,132 @@ const DECLARATIONS = {
     {word:'MAIN',     type:'then',     code:'<main>',     x:60,   y:50,   scale:1.1},
     {word:'SCRIPT',   type:'will',     code:'<script></script>', x:180, y:90, scale:1.1},
   ], links:[[0,1],[0,5],[1,2],[1,3],[1,4],[5,6],[5,7]] },
-  page:    null, // alias
-  website: null,
-  app:     null,
-  document:null,
-  site:    null,
-};
-DECLARATIONS.page=DECLARATIONS.html;
-DECLARATIONS.website=DECLARATIONS.html;
-DECLARATIONS.app=DECLARATIONS.html;
-DECLARATIONS.document=DECLARATIONS.html;
-DECLARATIONS.site=DECLARATIONS.html;
 
-let templateNodes=[]; // track template nodes for backspace wipe
+  javascript: { label:'JS MODULE', nodes:[
+    {word:'MODULE',   type:'will',     code:"'use strict';",     x:0,   y:-160, scale:2.2},
+    {word:'IMPORT',   type:'memory',   code:'import {} from',    x:-140, y:-60, scale:1.1},
+    {word:'CONST',    type:'memory',   code:'const',             x:-80,  y:40,  scale:1.0},
+    {word:'FUNC',     type:'will',     code:'function(){}',      x:80,   y:-60, scale:1.3},
+    {word:'IF',       type:'condition', code:'if(){}',            x:0,    y:50,  scale:1.0},
+    {word:'RETURN',   type:'then',     code:'return',            x:140,  y:40,  scale:1.0},
+    {word:'EXPORT',   type:'then',     code:'export default',    x:0,    y:130, scale:1.1},
+    {word:'LOG',      type:'then',     code:'console.log()',     x:-140, y:100, scale:0.9},
+  ], links:[[0,1],[0,3],[1,2],[3,4],[3,5],[4,5],[0,6],[2,7]] },
+
+  python: { label:'PYTHON SCRIPT', nodes:[
+    {word:'PYTHON',   type:'will',     code:'#!/usr/bin/env python3', x:0,  y:-160, scale:2.2},
+    {word:'IMPORT',   type:'memory',   code:'import',            x:-140, y:-60, scale:1.1},
+    {word:'DEF',      type:'will',     code:'def fn():',         x:80,   y:-60, scale:1.3},
+    {word:'CLASS',    type:'loop',     code:'class:',            x:-80,  y:40,  scale:1.2},
+    {word:'IF',       type:'condition', code:'if:',               x:0,    y:50,  scale:1.0},
+    {word:'ELSE',     type:'else',     code:'else:',             x:100,  y:50,  scale:0.9},
+    {word:'RETURN',   type:'then',     code:'return',            x:140,  y:40,  scale:1.0},
+    {word:'PRINT',    type:'then',     code:'print()',           x:-140, y:100, scale:0.9},
+    {word:'MAIN',     type:'will',     code:"if __name__=='__main__':", x:0, y:140, scale:1.1},
+  ], links:[[0,1],[0,2],[0,3],[2,4],[4,5],[2,6],[3,2],[0,8],[8,7]] },
+
+  json: { label:'JSON DATA', nodes:[
+    {word:'ROOT',     type:'memory',   code:'{',                 x:0,    y:-120, scale:2.2},
+    {word:'KEY',      type:'memory',   code:'"key":',            x:-120, y:0,    scale:1.2},
+    {word:'VALUE',    type:'truth',    code:'"value"',           x:-120, y:80,   scale:1.0},
+    {word:'ARRAY',    type:'loop',     code:'[]',                x:120,  y:0,    scale:1.2},
+    {word:'ITEM',     type:'then',     code:'{}',                x:120,  y:80,   scale:1.0},
+    {word:'NESTED',   type:'memory',   code:'{ ... }',           x:0,    y:60,   scale:1.0},
+  ], links:[[0,1],[1,2],[0,3],[3,4],[0,5],[5,1]] },
+
+  php: { label:'PHP SCRIPT', nodes:[
+    {word:'PHP',      type:'will',     code:'<?php',             x:0,    y:-160, scale:2.2},
+    {word:'$VAR',     type:'memory',   code:'$variable = ',      x:-120, y:-60,  scale:1.2},
+    {word:'FUNC',     type:'will',     code:'function(){}',      x:100,  y:-60,  scale:1.3},
+    {word:'IF',       type:'condition', code:'if(){}',            x:0,    y:40,   scale:1.0},
+    {word:'ECHO',     type:'then',     code:'echo',              x:-120, y:80,   scale:1.0},
+    {word:'ARRAY',    type:'loop',     code:'array()',           x:120,  y:40,   scale:1.1},
+    {word:'QUERY',    type:'fear',     code:'mysqli_query()',    x:0,    y:120,  scale:1.0},
+    {word:'CLOSE',    type:'lie',      code:'?>',                x:0,    y:180,  scale:0.9},
+  ], links:[[0,1],[0,2],[2,3],[1,4],[2,5],[3,6],[0,7]] },
+
+  sql: { label:'SQL QUERY', nodes:[
+    {word:'SELECT',   type:'will',     code:'SELECT',            x:0,    y:-120, scale:2.2},
+    {word:'COLS',     type:'memory',   code:'* | col1, col2',    x:-100, y:-30,  scale:1.1},
+    {word:'FROM',     type:'memory',   code:'FROM table',        x:100,  y:-30,  scale:1.2},
+    {word:'WHERE',    type:'condition', code:'WHERE',             x:0,    y:40,   scale:1.1},
+    {word:'JOIN',     type:'loop',     code:'JOIN ON',           x:-120, y:80,   scale:1.0},
+    {word:'ORDER',    type:'then',     code:'ORDER BY',          x:120,  y:80,   scale:1.0},
+    {word:'LIMIT',    type:'fear',     code:'LIMIT',             x:0,    y:130,  scale:0.9},
+  ], links:[[0,1],[0,2],[2,3],[3,4],[3,5],[5,6]] },
+
+  css: { label:'CSS STYLESHEET', nodes:[
+    {word:'STYLE',    type:'will',     code:'/* stylesheet */',  x:0,    y:-140, scale:2.2},
+    {word:'RESET',    type:'lie',      code:'*{margin:0;padding:0}', x:-120,y:-50, scale:1.0},
+    {word:'ROOT',     type:'memory',   code:':root{--vars}',    x:120,  y:-50,  scale:1.1},
+    {word:'BODY',     type:'then',     code:'body{}',            x:0,    y:20,   scale:1.2},
+    {word:'FLEX',     type:'loop',     code:'display:flex',      x:-100, y:80,   scale:1.0},
+    {word:'GRID',     type:'loop',     code:'display:grid',      x:100,  y:80,   scale:1.0},
+    {word:'@MEDIA',   type:'condition', code:'@media(){}',        x:0,    y:140,  scale:1.1},
+    {word:'ANIM',     type:'loop',     code:'@keyframes{}',      x:-140, y:140,  scale:0.9},
+  ], links:[[0,1],[0,2],[0,3],[3,4],[3,5],[0,6],[0,7]] },
+};
+
+// ── CONTEXT DETECTION — infer language from input ──
+// The mesh reads what you type and figures out what you mean.
+// $variable = PHP. A number = JS/JSON. def/print = Python. select = SQL.
+// head/body/div = HTML. color/flex/grid alone = CSS.
+const EXPLICIT_WORDS = {
+  html:'html', page:'html', website:'html', app:'html', document:'html', site:'html',
+  div:'html', head:'html', body:'html', nav:'html', footer:'html', header:'html',
+  section:'html', form:'html', canvas:'html', video:'html', audio:'html',
+  javascript:'javascript', js:'javascript', node:'javascript', react:'javascript',
+  typescript:'javascript', function:'javascript', const:'javascript', let:'javascript',
+  var:'javascript', async:'javascript', await:'javascript', promise:'javascript',
+  require:'javascript', module:'javascript', export:'javascript',
+  python:'python', def:'python', class:'python', import:'python', print:'python',
+  pip:'python', flask:'python', django:'python', self:'python', lambda:'python',
+  json:'json', api:'json', data:'json', schema:'json', payload:'json',
+  php:'php',
+  sql:'sql', select:'sql', insert:'sql', update:'sql', delete:'sql',
+  create:'sql', drop:'sql', table:'sql', database:'sql', query:'sql',
+  css:'css', stylesheet:'css', style:'css', responsive:'css', animate:'css',
+  flexbox:'css', layout:'css', theme:'css',
+};
+
+function detectContext(input){
+  const raw = input.trim();
+  if(!raw) return null;
+  const first = raw.split(/\s+/)[0];
+  const clean = first.toLowerCase().replace(/[^a-z0-9$_]/g,'');
+
+  // Pattern detection — what does the input LOOK like?
+  if(first.startsWith('$'))           return 'php';       // $username = PHP
+  if(first.startsWith('{') || first.startsWith('[')) return 'json'; // { or [ = JSON
+  if(first.startsWith('#'))           return 'python';    // #comment or #!/ = Python
+  if(first.startsWith('.') || first.startsWith('@')) return 'css'; // .class or @media = CSS
+  if(/^\d+$/.test(clean))             return 'javascript'; // bare number = JS
+  if(/^\d+\.\d+$/.test(first))        return 'javascript'; // decimal = JS
+  if(first.includes('='))             return 'javascript'; // x=5 = JS
+  if(first.includes('('))             return 'javascript'; // fn() = JS
+  if(first.includes(':') && !first.includes('//')) return 'css'; // color: = CSS
+  if(clean.endsWith('.py'))            return 'python';    // file.py
+  if(clean.endsWith('.js'))            return 'javascript';
+  if(clean.endsWith('.html'))          return 'html';
+  if(clean.endsWith('.css'))           return 'css';
+  if(clean.endsWith('.php'))           return 'php';
+  if(clean.endsWith('.json'))          return 'json';
+  if(clean.endsWith('.sql'))           return 'sql';
+
+  // Explicit word match
+  if(EXPLICIT_WORDS[clean]) return EXPLICIT_WORDS[clean];
+
+  return null;
+}
+
+let templateNodes=[];
+let currentContext=null;
 
 function spawnTemplate(key){
-  const tpl=DECLARATIONS[key];
+  const tpl=TEMPLATES[key];
   if(!tpl) return false;
   hideEmpty();
+  currentContext=key;
   const cx=W/2+100, cy=H/2;
   const spawned=[];
   tpl.nodes.forEach((def,i)=>{
@@ -812,15 +921,20 @@ function spawnTemplate(key){
     }, i*80);
   });
   templateNodes=spawned;
-  addLog(`"${key}" → full page scaffold (${tpl.nodes.length} nodes)`,'g');
+  addLog(`detected: ${tpl.label} → ${tpl.nodes.length} nodes`,'g');
+  // Update mode indicator to show detected language
+  modeType.textContent=tpl.label;
+  modeType.style.color=tpl.nodes[0].type==='will'?SHAPES.will.color:'var(--truth)';
   return true;
 }
 
 function instantWipe(){
-  nodes=[]; edges=[]; templateNodes=[];
+  nodes=[]; edges=[]; templateNodes=[]; currentContext=null;
   const el=document.getElementById('empty-hint');
   if(el){el.style.display='block';el.style.opacity='1';}
-  addLog('backspace → blank','r');
+  modeType.textContent='memory';
+  modeType.style.color='';
+  addLog('⌫ blank','r');
 }
 
 // ── ENGLISH → SHAPES ──
@@ -830,13 +944,14 @@ function translateEnglish(){
   if(!text) return;
   const words=text.split(/\s+/);
 
-  // Check if first word is a declaration
-  const firstWord=words[0].toLowerCase().replace(/[^a-z]/g,'');
-  if(words.length===1 && DECLARATIONS[firstWord]){
-    spawnTemplate(firstWord);
-    input.value='';
-    hideAC();
-    return;
+  // Check if input triggers a context template
+  if(nodes.length===0){
+    const ctx=detectContext(text);
+    if(ctx && TEMPLATES[ctx]){
+      spawnTemplate(ctx);
+      // If single word was the trigger, we're done
+      if(words.length===1){input.value='';hideAC();return;}
+    }
   }
 
   const found=[];
@@ -917,7 +1032,6 @@ langInput.addEventListener('input',e=>{
   const last=words[words.length-1];
 
   // BACKSPACE TO EMPTY = INSTANT WIPE
-  // If input just went blank and there are nodes, user deleted everything — clear the mesh
   if(val.trim()==='' && prevInputLen>0 && nodes.length>0){
     instantWipe();
     hideAC();
@@ -926,11 +1040,11 @@ langInput.addEventListener('input',e=>{
   }
   prevInputLen=val.length;
 
-  // LIVE TEMPLATE — single declaration word typed, spawn immediately (no Enter needed)
-  if(words.length===1 && val.trim().length>=3){
-    const w=words[0].toLowerCase().replace(/[^a-z]/g,'');
-    if(DECLARATIONS[w] && nodes.length===0){
-      spawnTemplate(w);
+  // SITUATIONAL DETECTION — infer context from what user types, spawn template live
+  if(words.length<=2 && val.trim().length>=1 && nodes.length===0){
+    const ctx=detectContext(val);
+    if(ctx && TEMPLATES[ctx]){
+      spawnTemplate(ctx);
     }
   }
 
