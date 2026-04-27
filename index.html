@@ -374,6 +374,82 @@ const SHAPES = {
   fear:      { color:'#ff7700', sides:4,   label:'GUARD',desc:'Diamond. Guards edges. High refusal threshold.' },
 };
 
+// ── DISTANCE LANGUAGE ──
+// Every node has a distance to every other node expressed as a STRING.
+// Close to truth: .1    Far from truth: .----------------1
+// The dashes ARE the distance. The flip IS the negation.
+// A lie node inverts the character: 1 becomes Ɩ (upside down).
+// The distance string is the node's identity in context.
+
+// Truth polarity: how close each type is to truth (1) vs lie (-1)
+const TYPE_POLARITY = {
+  truth:1, then:0.7, will:0.6, memory:0.3, loop:0.1,
+  condition:0, fear:-0.3, else:-0.6, lie:-1
+};
+
+const FLIP_MAP = {
+  'a':'ɐ','b':'q','c':'ɔ','d':'p','e':'ǝ','f':'ɟ','g':'ɓ','h':'ɥ',
+  'i':'ᴉ','j':'ɾ','k':'ʞ','l':'ן','m':'ɯ','n':'u','o':'o','p':'d',
+  'q':'b','r':'ɹ','s':'s','t':'ʇ','u':'n','v':'ʌ','w':'ʍ','x':'x',
+  'y':'ʎ','z':'z',
+  'A':'Ɐ','B':'ꓭ','C':'Ↄ','D':'ꓷ','E':'Ǝ','F':'Ⅎ','G':'⅁','H':'H',
+  'I':'I','J':'ᒋ','K':'ꓘ','L':'⅂','M':'W','N':'N','O':'O','P':'ꓒ',
+  'Q':'Ò','R':'ꓤ','S':'S','T':'ꓕ','U':'ꓵ','V':'ꓥ','W':'M','X':'X',
+  'Y':'⅄','Z':'Z',
+  '0':'0','1':'Ɩ','2':'ᘔ','3':'Ɛ','4':'ㄣ','5':'ϛ','6':'9','7':'Ɫ',
+  '8':'8','9':'6',
+  '+':'+','-':'-','*':'*','/':'/','=':'=','.':'˙',
+};
+
+// Also map the flipped chars back to normal for bidirectional
+const UNFLIP_MAP = {};
+for(const [k,v] of Object.entries(FLIP_MAP)) UNFLIP_MAP[v] = k;
+
+function flipChar(ch){
+  return FLIP_MAP[ch] || ch;
+}
+
+function unflipChar(ch){
+  return UNFLIP_MAP[ch] || ch;
+}
+
+function flipString(s){
+  return [...s].map(flipChar).join('');
+}
+
+function distanceString(fromNode, toNode){
+  // Pixel distance → dash count (1 dash per 20px, capped at 40)
+  const dx = fromNode.x - toNode.x, dy = fromNode.y - toNode.y;
+  const px = Math.sqrt(dx*dx + dy*dy);
+  const dashes = Math.min(40, Math.max(0, Math.round(px / 20)));
+
+  // Polarity: truth-aligned or lie-aligned?
+  const fromPol = TYPE_POLARITY[fromNode.type] || 0;
+  const toPol = TYPE_POLARITY[toNode.type] || 0;
+  const polarity = (fromPol + toPol) / 2; // -1 to 1
+
+  const label = toNode.label || '?';
+
+  if(polarity < -0.3){
+    // Lie-aligned: flip the label, long distance
+    return '.' + '-'.repeat(dashes) + flipString(label);
+  } else if(polarity > 0.3){
+    // Truth-aligned: short, clean
+    return '.' + '-'.repeat(dashes) + label;
+  } else {
+    // Neutral: normal but with distance
+    return '.' + '-'.repeat(dashes) + label;
+  }
+}
+
+function fullDistanceMap(node){
+  // Returns all distance strings from this node to every other
+  return nodes
+    .filter(n => n !== node)
+    .map(n => ({ target:n, dist:distanceString(node, n) }))
+    .sort((a,b) => a.dist.length - b.dist.length);
+}
+
 // ── KEYWORD MAP — plain English → shape type + code equivalent ──
 // User types "head" and gets <head>. Types "function" and gets a WILL node.
 // No angle brackets, no semicolons, no syntax. The mesh handles the punctuation.
@@ -811,6 +887,20 @@ class Edge {
       ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2);
       ctx.fillStyle=this.refused?'rgba(255,26,74,0.95)':'rgba(0,255,170,0.85)'; ctx.fill();
     }
+    // Distance string on edge — the notation IS the relationship
+    if(d < 250 && d > 30){
+      const ds = distanceString(this.a, this.b);
+      const mx = (this.a.x+this.b.x)/2, my = (this.a.y+this.b.y)/2;
+      const angle = Math.atan2(dy, dx);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(angle > Math.PI/2 || angle < -Math.PI/2 ? angle+Math.PI : angle);
+      ctx.font = "300 6px 'IBM Plex Mono'";
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(200,200,220,${alpha*1.5})`;
+      ctx.fillText(ds.length>30 ? ds.slice(0,30)+'…' : ds, 0, -4);
+      ctx.restore();
+    }
   }
 }
 
@@ -851,18 +941,26 @@ function clearAll(){
 }
 
 function exportCode(){
-  const ir={version:'v2',nodes:nodes.map(n=>({
-    id:n.id,type:n.type,label:n.label,
-    code:n.codeEquiv||null,
-    x:n.x|0,y:n.y|0,
-    memory_depth:n.memory.length,
-    valence:+n.valence.toFixed(2),
-    freewill:+n.freewill.toFixed(2)
-  })),edges:edges.map(e=>({from:e.a.id,to:e.b.id,firings:e.age}))};
+  const ir={version:'v3',nodes:nodes.map(n=>{
+    const dmap = fullDistanceMap(n).slice(0,10);
+    return {
+      id:n.id,type:n.type,label:n.label,
+      code:n.codeEquiv||null,
+      polarity:TYPE_POLARITY[n.type]||0,
+      x:n.x|0,y:n.y|0,
+      memory_depth:n.memory.length,
+      valence:+n.valence.toFixed(2),
+      freewill:+n.freewill.toFixed(2),
+      distances:dmap.map(d=>({to:d.target.id,str:d.dist})),
+    };
+  }),edges:edges.map(e=>({
+    from:e.a.id,to:e.b.id,firings:e.age,
+    dist:distanceString(e.a,e.b),
+  }))};
   const blob=new Blob([JSON.stringify(ir,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='mesh-ir.json'; a.click();
-  addLog('IR exported','g');
+  addLog('IR exported (v3 + distance language)','g');
 }
 
 // ── SITUATIONAL TEMPLATES ──
@@ -1786,12 +1884,16 @@ canvas.addEventListener('mousemove',e=>{
     tooltip.style.top=(e.clientY-10)+'px';
     const codeStr=hit.codeEquiv?`<br><span style="color:var(--truth)">→ ${hit.codeEquiv}</span>`:'';
     const faceStr=hit.isExprPart?`<br><span style="color:var(--will)">face ${hit.faceIndex+1}/${hit.faceCount} — scroll to rotate</span><br>${hit.faces.map((f,i)=>`<span style="opacity:${i===hit.faceIndex?1:0.3}">${f.label}</span>`).join(' · ')}`:'';
+    // Distance map — show this node's relationship to its nearest neighbours
+    const dmap = fullDistanceMap(hit).slice(0,5);
+    const distStr = dmap.length ? `<br><span style="color:var(--dim);font-size:7px">` +
+      dmap.map(d=>`<span style="color:${d.target.color}">${d.dist}</span>`).join('<br>') + `</span>` : '';
     tooltip.innerHTML=`<b style="color:${hit.color}">[${hit.label}]</b> 0x${hit.id}${codeStr}${faceStr}<br>
-      type: ${hit.type}<br>
+      type: ${hit.type} · polarity: ${(TYPE_POLARITY[hit.type]||0).toFixed(1)}<br>
       valence: ${hit.valence.toFixed(2)}<br>
       freewill: ${hit.freewill.toFixed(2)}<br>
       memory: ${hit.memory.length} / pos:${pos}<br>
-      energy: ${hit.energy.toFixed(2)}<br>
+      energy: ${hit.energy.toFixed(2)}${distStr}<br>
       <span style="opacity:0.5;font-size:8px">${SHAPES[hit.type].desc}</span>`;
   } else {
     tooltip.style.display='none';
