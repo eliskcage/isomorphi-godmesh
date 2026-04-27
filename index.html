@@ -1056,18 +1056,159 @@ function spawnTemplate(key){
 }
 
 function instantWipe(){
-  nodes=[]; edges=[]; templateNodes=[]; exprNodes=[]; currentContext=null;
+  nodes=[]; edges=[]; templateNodes=[]; exprNodes=[];
+  charNodes=[]; wordShapes=[]; charAnchorX=0;
+  currentContext=null;
   const el=document.getElementById('empty-hint');
   if(el){el.style.display='block';el.style.opacity='1';}
   meshBarHide();
   modeType.textContent='memory';
   modeType.style.color='';
   langInput.placeholder='type a programming word...';
+  prevInputVal='';
   addLog('⌫ blank','r');
 }
 
 function clearCursorRings(){
   nodes.forEach(n=>{ n.cursorRing=false; });
+}
+
+// ── CHARACTER-LEVEL ISOMORPHISM ──
+// Every keystroke IS a shape. Characters cluster into a pending word.
+// Space commits the word: character shapes collapse into one word-shape,
+// a >><< delimiter appears, and the cycle restarts. The ENTIRE string
+// translates back and forth at every level: char → word → expression.
+
+function charType(ch){
+  if(/[a-zA-Z_]/.test(ch)) return 'memory';
+  if(/[0-9]/.test(ch))     return 'truth';
+  if(/[+\-*/=<>!&|^~]/.test(ch)) return 'will';
+  if(/[(){}[\]]/.test(ch)) return 'loop';
+  if(/[.;:,]/.test(ch))    return 'then';
+  if(/[$#@!?]/.test(ch))   return 'fear';
+  if(/['"`]/.test(ch))     return 'condition';
+  return 'memory';
+}
+
+let charNodes = [];     // current uncommitted character shapes
+let wordShapes = [];    // committed word shapes (with >><< delimiters)
+let charAnchorX = 0;    // where the next char spawns
+let charAnchorY = 0;
+
+function initCharAnchor(){
+  charAnchorX = W/2 - 40;
+  charAnchorY = H/2;
+}
+
+function spawnCharNode(ch){
+  if(!charNodes.length && !wordShapes.length){
+    initCharAnchor();
+    hideEmpty();
+  }
+
+  const type = charType(ch);
+  const x = charAnchorX + charNodes.length * 28;
+  const y = charAnchorY + Math.sin(charNodes.length * 0.5) * 8;
+  const n = addNode(x, y, type, ch);
+  n.baseR = 10;
+  n.r = 10;
+  n.energy = 0.6;
+  n.firing = 20;
+  n.pinned = true;
+  n.isChar = true;
+  n.charValue = ch;
+
+  // Chain to previous char
+  if(charNodes.length > 0){
+    edges.push(new Edge(charNodes[charNodes.length-1], n));
+  }
+  // Chain to last word shape if this is first char of new word
+  if(charNodes.length === 0 && wordShapes.length > 0){
+    edges.push(new Edge(wordShapes[wordShapes.length-1], n));
+  }
+
+  charNodes.push(n);
+  return n;
+}
+
+function commitWord(){
+  if(!charNodes.length) return;
+
+  const word = charNodes.map(n => n.charValue).join('');
+  const midX = charNodes.reduce((s,n)=>s+n.x, 0) / charNodes.length;
+  const midY = charNodes.reduce((s,n)=>s+n.y, 0) / charNodes.length;
+
+  // Remove individual char nodes from the canvas
+  charNodes.forEach(cn => {
+    nodes = nodes.filter(n => n !== cn);
+    edges = edges.filter(e => e.a !== cn && e.b !== cn);
+  });
+
+  // Look up word in vocab — if recognised, use its type + code
+  const vocab = wordToVocab(word);
+  const type = vocab ? vocab.type : 'memory';
+  const code = vocab ? vocab.code : word;
+  const label = word.toUpperCase().slice(0,8);
+
+  // Spawn the collapsed word shape — bigger, resolved
+  const wn = addNode(midX, midY, type, label);
+  wn.baseR = 18 + Math.min(word.length, 8) * 1.5;
+  wn.r = wn.baseR;
+  wn.energy = 1;
+  wn.firing = 50;
+  wn.pinned = true;
+  wn.isWord = true;
+  wn.wordValue = word;
+  wn.codeEquiv = code;
+
+  // Connect to previous word
+  if(wordShapes.length > 0){
+    const prev = wordShapes[wordShapes.length - 1];
+    edges.push(new Edge(prev, wn));
+  }
+  wordShapes.push(wn);
+
+  // Spawn the >><< delimiter
+  const dx = wn.x + wn.baseR + 22;
+  const delim = addNode(dx, midY, 'then', '>><<');
+  delim.baseR = 7;
+  delim.r = 7;
+  delim.energy = 0.3;
+  delim.firing = 15;
+  delim.pinned = true;
+  delim.isDelimiter = true;
+  delim.codeEquiv = ' ';
+  edges.push(new Edge(wn, delim));
+  wordShapes.push(delim);
+
+  // Reset anchor for next word
+  charAnchorX = dx + 30;
+  charNodes = [];
+
+  addLog(`"${word}" → ${code}`, 'g');
+  addLog(`mesh→str: "${reconstructString()}"`, 'b');
+
+  // Update mode to show recognised context
+  if(vocab){
+    modeType.textContent = SHAPES[type].label;
+    modeType.style.color = SHAPES[type].color;
+  }
+}
+
+function removeLastChar(){
+  if(!charNodes.length) return false;
+  const last = charNodes.pop();
+  nodes = nodes.filter(n => n !== last);
+  edges = edges.filter(e => e.a !== last && e.b !== last);
+  return true;
+}
+
+function reconstructString(){
+  // Mesh → String: read the word shapes back into a string
+  return wordShapes
+    .filter(n => n.isWord)
+    .map(n => n.wordValue)
+    .join(' ');
 }
 
 // ── PROGRESS BAR — self-healing communication channel ──
@@ -1487,6 +1628,7 @@ function highlightAC(idx){
 
 const langInput=document.getElementById('lang-input');
 let prevInputLen=0;
+let prevInputVal='';
 langInput.addEventListener('input',e=>{
   const val=e.target.value;
   const words=val.split(/\s+/);
@@ -1495,26 +1637,56 @@ langInput.addEventListener('input',e=>{
   // BACKSPACE TO EMPTY = INSTANT WIPE
   if(val.trim()==='' && prevInputLen>0 && nodes.length>0){
     instantWipe();
+    charNodes=[]; wordShapes=[]; charAnchorX=0;
     hideAC();
     prevInputLen=0;
+    prevInputVal='';
     return;
   }
+
+  // CHARACTER-LEVEL SHAPE TRACKING
+  // Detect what changed since last input
+  if(val.length > prevInputVal.length){
+    // Characters added
+    const added = val.slice(prevInputVal.length);
+    for(const ch of added){
+      if(ch === ' '){
+        // Space = commit word, spawn >><< delimiter
+        commitWord();
+      } else {
+        spawnCharNode(ch);
+      }
+    }
+  } else if(val.length < prevInputVal.length && val.length > 0){
+    // Characters removed (backspace mid-word)
+    const removed = prevInputVal.length - val.length;
+    for(let i=0; i<removed; i++) removeLastChar();
+  }
+
   prevInputLen=val.length;
+  prevInputVal=val;
 
   // EXPRESSION DETECTION — "1+1=" triggers multi-face expression engine
-  if(nodes.length===0 && !meshBarTimer){
+  if(exprNodes.length===0 && !meshBarTimer){
     const expr = parseExpression(val);
     if(expr){
+      // Clear char nodes first — expression engine takes over
+      charNodes.forEach(cn=>{ nodes=nodes.filter(n=>n!==cn); edges=edges.filter(e=>e.a!==cn&&e.b!==cn); });
+      wordShapes.forEach(cn=>{ nodes=nodes.filter(n=>n!==cn); edges=edges.filter(e=>e.a!==cn&&e.b!==cn); });
+      charNodes=[]; wordShapes=[];
       meshBarShow(4, ()=>{ spawnExpression(expr); });
-      prevInputLen=val.length;
       return;
     }
   }
 
   // SITUATIONAL DETECTION — infer context, show progress bar, then spawn
-  if(words.length<=2 && val.trim().length>=2 && nodes.length===0 && !meshBarTimer){
+  if(words.length<=2 && val.trim().length>=2 && !templateNodes.length && !exprNodes.length && !meshBarTimer){
     const ctx=detectContext(val);
     if(ctx && TEMPLATES[ctx]){
+      // Clear char nodes — template engine takes over
+      charNodes.forEach(cn=>{ nodes=nodes.filter(n=>n!==cn); edges=edges.filter(e=>e.a!==cn&&e.b!==cn); });
+      wordShapes.forEach(cn=>{ nodes=nodes.filter(n=>n!==cn); edges=edges.filter(e=>e.a!==cn&&e.b!==cn); });
+      charNodes=[]; wordShapes=[];
       hideEmpty();
       meshBarShow(words.length+2, ()=>{ spawnTemplate(ctx); });
     }
