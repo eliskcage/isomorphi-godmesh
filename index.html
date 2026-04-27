@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Living Mesh — Shape Language</title>
+<title>God Mesh — Isomorphic Shape Language</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@1,400;1,700&display=swap');
 
@@ -38,7 +38,7 @@ body{
 
 #canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;}
 
-/* ── LEFT PANEL ── */
+/* ── LEFT PANEL — faded dev tools ── */
 #left{
   position:absolute;top:0;left:0;height:100%;
   width:220px;
@@ -48,7 +48,10 @@ body{
   padding:20px 0;
   z-index:10;
   pointer-events:all;
+  opacity:0.08;
+  transition:opacity 0.4s;
 }
+#left:hover{opacity:0.85;}
 
 #wordmark{
   font-family:'Playfair Display',serif;
@@ -85,14 +88,14 @@ body{
 
 .shape-icon svg{width:100%;height:100%;}
 
-/* ── BOTTOM PANEL — language input ── */
+/* ── BOTTOM PANEL — shape input ── */
 #bottom{
-  position:absolute;bottom:0;left:220px;right:0;
-  background:linear-gradient(to top,rgba(4,4,10,0.97),rgba(4,4,10,0.7));
-  border-top:1px solid var(--border);
+  position:absolute;bottom:0;left:0;right:0;
   padding:14px 20px;
   z-index:10;
   display:flex;align-items:center;gap:12px;
+  pointer-events:none;
+  opacity:0;
 }
 
 #lang-input{
@@ -104,31 +107,137 @@ body{
   letter-spacing:0.06em;
   color:rgba(255,255,255,0.75);
   caret-color:var(--truth);
+  pointer-events:all;
 }
 #lang-input::placeholder{color:var(--dim);}
 
-#lang-hint{
-  font-size:9px;letter-spacing:0.08em;
-  color:var(--dim);
-  white-space:nowrap;
+#lang-hint{display:none;}
+#translate-btn{display:none;}
+
+/* ── SHAPE INPUT — the real interface ── */
+#shape-input{
+  position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:16px;
+  z-index:20;
 }
 
-#translate-btn{
-  background:none;border:1px solid rgba(0,255,170,0.3);
-  color:var(--truth);padding:6px 14px;
-  font-family:'IBM Plex Mono',monospace;
-  font-size:9px;letter-spacing:0.12em;
-  cursor:pointer;transition:all 0.2s;text-transform:uppercase;
+#shape-input-box{
+  width:260px;height:52px;
+  background:rgba(8,8,15,0.6);
+  border:1px solid var(--border);
+  border-radius:26px;
+  display:flex;align-items:center;
+  padding:0 20px;gap:10px;
+  transition:border-color 0.3s;
+  cursor:text;
 }
-#translate-btn:hover{background:rgba(0,255,170,0.08);border-color:var(--truth);}
+#shape-input-box:focus-within{
+  border-color:rgba(255,255,255,0.15);
+}
+
+#shape-text{
+  flex:1;
+  background:transparent;border:none;outline:none;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;letter-spacing:0.04em;
+  color:rgba(255,255,255,0.8);
+  caret-color:var(--will);
+}
+#shape-text::placeholder{color:rgba(255,255,255,0.12);font-size:11px;}
+
+#shape-preview{
+  width:28px;height:28px;
+  flex-shrink:0;
+  transition:all 0.3s;
+}
+
+.op-shape{
+  width:48px;height:48px;
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all 0.25s;
+  border:1px solid var(--border);
+  background:rgba(8,8,15,0.4);
+  position:relative;
+}
+.op-shape:hover{
+  transform:scale(1.15);
+  border-color:rgba(255,255,255,0.2);
+}
+.op-shape svg{width:24px;height:24px;}
+
+#op-plus{order:1;}
+#op-equals{
+  order:0;
+  position:absolute;
+  bottom:56px;left:50%;transform:translateX(-50%);
+  border-color:rgba(0,255,170,0.2);
+}
+#op-equals:hover{border-color:var(--truth);}
+
+/* ── DECLARATION CHAIN — shapes the user has built ── */
+#chain{
+  position:absolute;bottom:110px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;
+  z-index:15;
+}
+.chain-shape{
+  width:44px;height:44px;
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;letter-spacing:0.1em;
+  color:rgba(255,255,255,0.5);
+  border:1.5px solid;
+  transition:all 0.3s;
+  cursor:pointer;
+  position:relative;
+}
+.chain-shape:hover{transform:scale(1.2);}
+.chain-op{
+  font-size:16px;
+  color:rgba(255,255,255,0.15);
+  padding:0 2px;
+}
+
+/* ── RESPONSE — mesh reply shapes, ordered by distance ── */
+#response{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  z-index:12;pointer-events:none;
+  opacity:0;transition:opacity 0.5s;
+}
+#response.active{opacity:1;pointer-events:all;}
+.response-row{
+  display:flex;align-items:center;gap:14px;
+  transition:all 0.3s;
+  cursor:pointer;
+  padding:6px 16px;
+  border-radius:20px;
+}
+.response-row:hover{background:rgba(255,255,255,0.03);}
+.response-shape{
+  width:32px;height:32px;
+  flex-shrink:0;
+}
+.response-text{
+  font-size:10px;letter-spacing:0.08em;
+  max-width:300px;
+}
+.response-dist{
+  font-size:7px;letter-spacing:0.04em;
+  color:var(--dim);
+  font-family:'IBM Plex Mono',monospace;
+}
 
 /* ── AUTOCOMPLETE ── */
 #autocomplete{
-  position:absolute;bottom:48px;left:240px;
+  position:absolute;bottom:100px;left:50%;transform:translateX(-50%);
   background:rgba(8,8,15,0.97);
   border:1px solid var(--border);
   display:none;z-index:25;
   max-width:360px;min-width:200px;
+  border-radius:12px;overflow:hidden;
 }
 .ac-item{
   display:flex;align-items:center;gap:10px;
@@ -144,18 +253,18 @@ body{
 
 /* ── EMPTY STATE ── */
 #empty-hint{
-  position:absolute;top:50%;left:50%;transform:translate(-30%,-50%);
+  position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
   text-align:center;z-index:5;pointer-events:none;
   transition:opacity 0.5s;
 }
 #empty-hint h2{
   font-family:'Playfair Display',serif;font-style:italic;
-  font-size:1.2rem;color:rgba(255,255,255,0.08);
+  font-size:1.4rem;color:rgba(255,255,255,0.06);
   font-weight:400;margin-bottom:12px;
 }
 #empty-hint p{
   font-size:9px;letter-spacing:0.1em;
-  color:rgba(255,255,255,0.06);
+  color:rgba(255,255,255,0.04);
   line-height:2;
 }
 
@@ -222,13 +331,15 @@ body{
 .pressure-dot.cool{background:var(--truth);transform:scale(1.2);}
 .pressure-dot.done{background:var(--will);transform:scale(1.1);}
 
-/* ── LOG ── */
+/* ── LOG — faded ── */
 #logbox{
   position:absolute;top:20px;right:20px;
   width:260px;
   z-index:10;pointer-events:none;
   display:flex;flex-direction:column;gap:3px;
+  opacity:0.15;transition:opacity 0.4s;
 }
+#logbox:hover{opacity:0.8;}
 .logline{
   font-size:9px;letter-spacing:0.05em;
   color:rgba(180,180,210,0.3);
@@ -255,11 +366,11 @@ body{
 
 /* ── MODE INDICATOR ── */
 #mode{
-  position:absolute;top:20px;left:240px;
-  font-size:9px;letter-spacing:0.15em;text-transform:uppercase;
-  color:var(--dim);z-index:10;pointer-events:none;
+  position:absolute;top:20px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:0.2em;text-transform:uppercase;
+  color:rgba(255,255,255,0.06);z-index:10;pointer-events:none;
 }
-#mode span{color:var(--truth);}
+#mode span{color:rgba(0,255,170,0.15);}
 </style>
 </head>
 <body>
@@ -319,12 +430,27 @@ body{
   </div>
 </div>
 
-<!-- BOTTOM: language input -->
+<!-- hidden language input (engine still uses this) -->
 <div id="bottom">
-  <div id="lang-hint">⬡</div>
-  <input id="lang-input" placeholder="describe your program... head body div button function if else loop" />
-  <button id="translate-btn" onclick="translateEnglish()">translate → shapes</button>
+  <input id="lang-input" placeholder="" />
 </div>
+
+<!-- SHAPE INPUT — the real interface -->
+<div id="shape-input">
+  <div id="shape-input-box" onclick="document.getElementById('shape-text').focus()">
+    <canvas id="shape-preview" width="28" height="28"></canvas>
+    <input id="shape-text" placeholder="type a shape..." autocomplete="off" spellcheck="false" />
+  </div>
+  <div id="op-plus" class="op-shape" onclick="chainPlus()" title="+ add shape">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="4" x2="12" y2="20" stroke="#cc44ff" stroke-width="2"/><line x1="4" y1="12" x2="20" y2="12" stroke="#cc44ff" stroke-width="2"/></svg>
+  </div>
+  <div id="op-equals" class="op-shape" onclick="chainEquals()" title="= resolve">
+    <svg viewBox="0 0 24 24"><line x1="5" y1="9" x2="19" y2="9" stroke="#00ffaa" stroke-width="2"/><line x1="5" y1="15" x2="19" y2="15" stroke="#00ffaa" stroke-width="2"/></svg>
+  </div>
+</div>
+
+<div id="chain"></div>
+<div id="response"></div>
 
 <div id="logbox"></div>
 <div id="tooltip"></div>
@@ -336,15 +462,10 @@ body{
   <div id="meshbar-pressure"></div>
 </div>
 <div id="empty-hint">
-  <h2>the mesh is empty</h2>
-  <p>type anything — the mesh figures out what you mean<br><br>
-  <span style="color:rgba(221,255,0,0.12)">html</span> &nbsp; <span style="color:rgba(51,153,255,0.15)">div</span> &nbsp; <span style="color:rgba(204,68,255,0.15)">function</span> &nbsp; <span style="color:rgba(0,255,170,0.12)">def</span> &nbsp; <span style="color:rgba(255,119,0,0.12)">$username</span> &nbsp; <span style="color:rgba(255,204,0,0.12)">select</span> &nbsp; <span style="color:rgba(68,255,204,0.12)">42</span><br><br>
-  <span style="color:rgba(255,255,255,0.06)">html → HTML page &nbsp;|&nbsp; $var → PHP &nbsp;|&nbsp; 42 → JS<br>
-  def → Python &nbsp;|&nbsp; select → SQL &nbsp;|&nbsp; flex → CSS</span><br><br>
-  no syntax needed — the mesh handles the punctuation<br>
-  <span style="color:rgba(255,26,74,0.1)">backspace = instant blank</span></p>
+  <h2>god mesh</h2>
+  <p>type a shape — the mesh becomes your declaration</p>
 </div>
-<div id="mode">placing: <span id="mode-type">memory</span></div>
+<div id="mode"><span id="mode-type"></span></div>
 
 <script>
 const canvas = document.getElementById('canvas');
@@ -1711,11 +1832,13 @@ function hideAC(){acBox.style.display='none';acItems=[];acIdx=-1;}
 
 function pickAC(i){
   const input=document.getElementById('lang-input');
-  const words=input.value.split(/\s+/);
-  words[words.length-1]=acItems[i].word;
-  input.value=words.join(' ')+' ';
+  const st=document.getElementById('shape-text');
+  const picked = acItems[i].word;
+  input.value = picked;
+  if(st) st.value = picked;
   hideAC();
-  input.focus();
+  if(st){ st.focus(); drawPreviewShape(acItems[i].type); }
+  else input.focus();
 }
 
 function highlightAC(idx){
@@ -1978,6 +2101,234 @@ function draw(){
   maybeFire();
   requestAnimationFrame(draw);
 }
+
+// ── SHAPE INPUT SYSTEM — the real interface ���─
+// User types into the shape input. Each word becomes a shape in the chain.
+// + adds another shape. = resolves the declaration and the mesh responds.
+
+const shapeText = document.getElementById('shape-text');
+const shapePreview = document.getElementById('shape-preview');
+const spCtx = shapePreview.getContext('2d');
+const chainEl = document.getElementById('chain');
+const responseEl = document.getElementById('response');
+
+let declaration = []; // array of {word, type, code, color}
+
+function getShapeForWord(word){
+  const w = word.toLowerCase().replace(/[^a-z0-9$_]/g,'');
+  const v = WORD_INDEX[w];
+  if(v) return { word:v.word, type:v.type, code:v.code, color:SHAPES[v.type].color };
+  // If not in vocab, treat as a noun (memory = green many-sided = dictionary)
+  return { word:w||word, type:'memory', code:word, color:SHAPES.memory.color };
+}
+
+function drawPreviewShape(type){
+  spCtx.clearRect(0,0,28,28);
+  const s = SHAPES[type] || SHAPES.memory;
+  spCtx.strokeStyle = s.color;
+  spCtx.lineWidth = 1.5;
+  spCtx.fillStyle = s.color+'22';
+  const cx=14, cy=14, r=10;
+
+  if(s.sides===0 && (type==='memory'||type==='then')){
+    spCtx.beginPath(); spCtx.arc(cx,cy,r,0,Math.PI*2);
+    spCtx.fill(); spCtx.stroke();
+  } else if(s.sides===3){
+    spCtx.beginPath();
+    spCtx.moveTo(cx,cy-r); spCtx.lineTo(cx+r*0.866,cy+r*0.5);
+    spCtx.lineTo(cx-r*0.866,cy+r*0.5); spCtx.closePath();
+    spCtx.fill(); spCtx.stroke();
+  } else if(s.sides===4 && type==='fear'){
+    spCtx.beginPath();
+    spCtx.moveTo(cx,cy-r); spCtx.lineTo(cx+r,cy);
+    spCtx.lineTo(cx,cy+r); spCtx.lineTo(cx-r,cy); spCtx.closePath();
+    spCtx.fill(); spCtx.stroke();
+  } else if(s.sides===4){
+    spCtx.beginPath(); spCtx.rect(cx-r,cy-r,r*2,r*2);
+    spCtx.fill(); spCtx.stroke();
+  } else if(s.sides===5){
+    spCtx.beginPath();
+    for(let i=0;i<5;i++){
+      const a=-Math.PI/2+i*Math.PI*2/5;
+      i===0?spCtx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):spCtx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+    } spCtx.closePath(); spCtx.fill(); spCtx.stroke();
+  } else if(s.sides===6){
+    spCtx.beginPath();
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3-Math.PI/6;
+      i===0?spCtx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):spCtx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+    } spCtx.closePath(); spCtx.fill(); spCtx.stroke();
+  }
+}
+
+function renderChain(){
+  chainEl.innerHTML = declaration.map((d,i)=>{
+    const plus = i < declaration.length-1 ? '<span class="chain-op">+</span>' : '';
+    return `<div class="chain-shape" style="border-color:${d.color};background:${d.color}11" title="${d.word} → ${d.code}">
+      <span style="color:${d.color}">${d.word.slice(0,4).toUpperCase()}</span>
+    </div>${plus}`;
+  }).join('');
+}
+
+function chainPlus(){
+  const word = shapeText.value.trim();
+  if(!word) return;
+  const shape = getShapeForWord(word);
+  declaration.push(shape);
+
+  // Spawn on canvas too
+  const angle = -Math.PI/2 + (declaration.length-1) * (Math.PI/6);
+  const radius = 140 + declaration.length * 30;
+  const cx = W/2, cy = H/2 - 60;
+  const x = cx + Math.cos(angle) * radius;
+  const y = cy + Math.sin(angle) * radius * 0.6;
+  const n = addNode(x, y, shape.type, shape.word.toUpperCase().slice(0,6));
+  n.codeEquiv = shape.code;
+  n.baseR = 20; n.r = 20;
+  n.energy = 0.8; n.firing = 40;
+  n.pinned = true;
+
+  hideEmpty();
+  renderChain();
+  shapeText.value = '';
+  shapeText.focus();
+  addLog(`+ ${shape.word} [${SHAPES[shape.type].label}]`,'g');
+}
+
+function chainEquals(){
+  // First add the current word if there is one
+  if(shapeText.value.trim()) chainPlus();
+  if(!declaration.length) return;
+
+  addLog(`= resolving ${declaration.length} shapes...`,'b');
+
+  // The mesh responds: generate interpretations ordered by distance
+  // Closest (easiest, truth-aligned) at top, furthest (hardest, lie-aligned) at bottom
+  const responses = generateResponses(declaration);
+  showResponses(responses);
+}
+
+function generateResponses(decl){
+  const subject = decl.map(d=>d.word).join(' ');
+  const results = [];
+
+  // Truth-aligned (closest, easiest): positive interpretation
+  results.push({
+    distance: 0,
+    text: `you love ${subject}?`,
+    type: 'truth',
+    distStr: `.${subject}`,
+  });
+  results.push({
+    distance: 1,
+    text: `${subject} is interesting`,
+    type: 'then',
+    distStr: `.-${subject}`,
+  });
+  results.push({
+    distance: 2,
+    text: `tell me more about ${subject}`,
+    type: 'memory',
+    distStr: `.---${subject}`,
+  });
+  results.push({
+    distance: 3,
+    text: `${subject}... maybe`,
+    type: 'condition',
+    distStr: `.------${subject}`,
+  });
+  results.push({
+    distance: 4,
+    text: `${subject} is complicated`,
+    type: 'fear',
+    distStr: `.----------${subject}`,
+  });
+  results.push({
+    distance: 5,
+    text: `you hate ${subject}?`,
+    type: 'lie',
+    distStr: `.----------------${flipString(subject)}`,
+  });
+
+  return results;
+}
+
+function showResponses(responses){
+  responseEl.innerHTML = '';
+  responses.forEach((r,i)=>{
+    const s = SHAPES[r.type];
+    const row = document.createElement('div');
+    row.className = 'response-row';
+    row.style.opacity = '0';
+    row.style.transform = 'translateY(10px)';
+    row.innerHTML = `
+      <svg class="response-shape" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="12" fill="${s.color}11" stroke="${s.color}" stroke-width="1.5"/>
+      </svg>
+      <span class="response-text" style="color:${s.color}">${r.text}</span>
+      <span class="response-dist">${r.distStr}</span>
+    `;
+    row.addEventListener('click',()=>{
+      addLog(`chose: "${r.text}" (${r.type})`,'g');
+      responseEl.classList.remove('active');
+      // Spawn the response as a node
+      const n = addNode(W/2, H/2 - 100, r.type, r.text.slice(0,8).toUpperCase());
+      n.codeEquiv = r.text;
+      n.baseR = 24; n.r = 24;
+      n.energy = 1; n.firing = 80;
+      n.cursorRing = true; n.cursorPhase = 0;
+    });
+    responseEl.appendChild(row);
+
+    setTimeout(()=>{
+      row.style.transition = 'all 0.4s ease';
+      row.style.opacity = '1';
+      row.style.transform = 'none';
+    }, i * 120);
+  });
+  responseEl.classList.add('active');
+}
+
+// Wire shape-text input to preview + autocomplete
+shapeText.addEventListener('input',e=>{
+  const val = e.target.value.trim();
+  if(val){
+    const shape = getShapeForWord(val);
+    drawPreviewShape(shape.type);
+    // Also drive the hidden lang-input for autocomplete
+    langInput.value = val;
+    langInput.dispatchEvent(new Event('input'));
+  } else {
+    spCtx.clearRect(0,0,28,28);
+    // Backspace to empty = wipe everything
+    if(declaration.length > 0 || nodes.length > 0){
+      declaration = [];
+      renderChain();
+      responseEl.classList.remove('active');
+      responseEl.innerHTML = '';
+      instantWipe();
+    }
+  }
+});
+
+shapeText.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    if(e.shiftKey || declaration.length > 0){
+      chainEquals(); // shift+enter or already has chain = resolve
+    } else {
+      chainPlus(); // first enter = add to chain
+    }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    // Tab picks autocomplete if available
+    if(acItems.length) pickAC(acIdx>=0?acIdx:0);
+  }
+});
+
+// Initial preview
+drawPreviewShape('memory');
+shapeText.focus();
 
 draw();
 </script>
