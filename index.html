@@ -737,6 +737,22 @@ class Node {
       ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=1; ctx.setLineDash([3,3]); ctx.stroke();
       ctx.setLineDash([]);
     }
+
+    // Cursor ring — pulsing golden beacon on the entry-point node
+    if(this.cursorRing){
+      this.cursorPhase = (this.cursorPhase||0) + 0.04;
+      const cp = Math.sin(this.cursorPhase)*0.5+0.5;
+      const cr = this.r + 12 + cp*8;
+      ctx.beginPath(); ctx.arc(this.x, this.y, cr, 0, Math.PI*2);
+      ctx.strokeStyle=`rgba(255,215,0,${0.3+cp*0.5})`;
+      ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+      // Inner glow
+      const grd=ctx.createRadialGradient(this.x,this.y,this.r,this.x,this.y,cr+4);
+      grd.addColorStop(0,`rgba(255,215,0,${cp*0.12})`);
+      grd.addColorStop(1,'rgba(255,215,0,0)');
+      ctx.beginPath(); ctx.arc(this.x,this.y,cr+4,0,Math.PI*2);
+      ctx.fillStyle=grd; ctx.fill();
+    }
   }
 }
 
@@ -833,7 +849,8 @@ function exportCode(){
 // The mesh infers the programming context from what you type.
 // User never picks a language — the mesh figures it out.
 const TEMPLATES = {
-  html: { label:'HTML PAGE', nodes:[
+  html: { label:'HTML PAGE', cursor:5, hint:'add elements to body... div, nav, form, button',
+    nodes:[
     {word:'HTML',     type:'will',     code:'<!DOCTYPE html><html>',  x:0,   y:-160, scale:2.5},
     {word:'HEAD',     type:'memory',   code:'<head>',     x:-120, y:-60,  scale:1.4},
     {word:'META',     type:'fear',     code:'<meta charset="UTF-8">', x:-200, y:20, scale:0.9},
@@ -844,7 +861,8 @@ const TEMPLATES = {
     {word:'SCRIPT',   type:'will',     code:'<script></script>', x:180, y:90, scale:1.1},
   ], links:[[0,1],[0,5],[1,2],[1,3],[1,4],[5,6],[5,7]] },
 
-  javascript: { label:'JS MODULE', nodes:[
+  javascript: { label:'JS MODULE', cursor:3, hint:'write your function... fetch, async, promise, array',
+    nodes:[
     {word:'MODULE',   type:'will',     code:"'use strict';",     x:0,   y:-160, scale:2.2},
     {word:'IMPORT',   type:'memory',   code:'import {} from',    x:-140, y:-60, scale:1.1},
     {word:'CONST',    type:'memory',   code:'const',             x:-80,  y:40,  scale:1.0},
@@ -855,7 +873,8 @@ const TEMPLATES = {
     {word:'LOG',      type:'then',     code:'console.log()',     x:-140, y:100, scale:0.9},
   ], links:[[0,1],[0,3],[1,2],[3,4],[3,5],[4,5],[0,6],[2,7]] },
 
-  python: { label:'PYTHON SCRIPT', nodes:[
+  python: { label:'PYTHON SCRIPT', cursor:2, hint:'define your logic... class, import, print, lambda',
+    nodes:[
     {word:'PYTHON',   type:'will',     code:'#!/usr/bin/env python3', x:0,  y:-160, scale:2.2},
     {word:'IMPORT',   type:'memory',   code:'import',            x:-140, y:-60, scale:1.1},
     {word:'DEF',      type:'will',     code:'def fn():',         x:80,   y:-60, scale:1.3},
@@ -867,7 +886,8 @@ const TEMPLATES = {
     {word:'MAIN',     type:'will',     code:"if __name__=='__main__':", x:0, y:140, scale:1.1},
   ], links:[[0,1],[0,2],[0,3],[2,4],[4,5],[2,6],[3,2],[0,8],[8,7]] },
 
-  json: { label:'JSON DATA', nodes:[
+  json: { label:'JSON DATA', cursor:1, hint:'define your data... key, array, nested, value',
+    nodes:[
     {word:'ROOT',     type:'memory',   code:'{',                 x:0,    y:-120, scale:2.2},
     {word:'KEY',      type:'memory',   code:'"key":',            x:-120, y:0,    scale:1.2},
     {word:'VALUE',    type:'truth',    code:'"value"',           x:-120, y:80,   scale:1.0},
@@ -876,7 +896,8 @@ const TEMPLATES = {
     {word:'NESTED',   type:'memory',   code:'{ ... }',           x:0,    y:60,   scale:1.0},
   ], links:[[0,1],[1,2],[0,3],[3,4],[0,5],[5,1]] },
 
-  php: { label:'PHP SCRIPT', nodes:[
+  php: { label:'PHP SCRIPT', cursor:1, hint:'set your variables... $name, function, echo, query',
+    nodes:[
     {word:'PHP',      type:'will',     code:'<?php',             x:0,    y:-160, scale:2.2},
     {word:'$VAR',     type:'memory',   code:'$variable = ',      x:-120, y:-60,  scale:1.2},
     {word:'FUNC',     type:'will',     code:'function(){}',      x:100,  y:-60,  scale:1.3},
@@ -887,7 +908,8 @@ const TEMPLATES = {
     {word:'CLOSE',    type:'lie',      code:'?>',                x:0,    y:180,  scale:0.9},
   ], links:[[0,1],[0,2],[2,3],[1,4],[2,5],[3,6],[0,7]] },
 
-  sql: { label:'SQL QUERY', nodes:[
+  sql: { label:'SQL QUERY', cursor:1, hint:'what columns?... * or name, email, id',
+    nodes:[
     {word:'SELECT',   type:'will',     code:'SELECT',            x:0,    y:-120, scale:2.2},
     {word:'COLS',     type:'memory',   code:'* | col1, col2',    x:-100, y:-30,  scale:1.1},
     {word:'FROM',     type:'memory',   code:'FROM table',        x:100,  y:-30,  scale:1.2},
@@ -897,7 +919,8 @@ const TEMPLATES = {
     {word:'LIMIT',    type:'fear',     code:'LIMIT',             x:0,    y:130,  scale:0.9},
   ], links:[[0,1],[0,2],[2,3],[3,4],[3,5],[5,6]] },
 
-  css: { label:'CSS STYLESHEET', nodes:[
+  css: { label:'CSS STYLESHEET', cursor:3, hint:'style the body... color, background, flex, grid, animate',
+    nodes:[
     {word:'STYLE',    type:'will',     code:'/* stylesheet */',  x:0,    y:-140, scale:2.2},
     {word:'RESET',    type:'lie',      code:'*{margin:0;padding:0}', x:-120,y:-50, scale:1.0},
     {word:'ROOT',     type:'memory',   code:':root{--vars}',    x:120,  y:-50,  scale:1.1},
@@ -985,13 +1008,28 @@ function spawnTemplate(key){
         tpl.links.forEach(([a,b])=>{
           if(spawned[a]&&spawned[b]) edges.push(new Edge(spawned[a],spawned[b]));
         });
+        // Cursor: highlight the entry-point node
+        const ci = tpl.cursor != null ? tpl.cursor : 0;
+        if(spawned[ci]){
+          const cn = spawned[ci];
+          cn.selected = true;
+          cn.energy = 1;
+          cn.firing = 120;
+          cn.cursorRing = true;
+          cn.cursorPhase = 0;
+        }
+        // Hint: set placeholder for next input
+        if(tpl.hint){
+          langInput.value = '';
+          langInput.placeholder = tpl.hint;
+          langInput.focus();
+        }
       }
       addLog(`${def.word} → ${def.code}`,'g');
     }, i*80);
   });
   templateNodes=spawned;
   addLog(`detected: ${tpl.label} → ${tpl.nodes.length} nodes`,'g');
-  // Update mode indicator to show detected language
   modeType.textContent=tpl.label;
   modeType.style.color=tpl.nodes[0].type==='will'?SHAPES.will.color:'var(--truth)';
   return true;
@@ -1004,7 +1042,12 @@ function instantWipe(){
   meshBarHide();
   modeType.textContent='memory';
   modeType.style.color='';
+  langInput.placeholder='type a programming word...';
   addLog('⌫ blank','r');
+}
+
+function clearCursorRings(){
+  nodes.forEach(n=>{ n.cursorRing=false; });
 }
 
 // ── PROGRESS BAR — self-healing communication channel ──
@@ -1229,6 +1272,9 @@ langInput.addEventListener('input',e=>{
       meshBarShow(words.length+2, ()=>{ spawnTemplate(ctx); });
     }
   }
+
+  // Clear cursor beacon once user starts typing into a spawned template
+  if(val.trim().length>0 && templateNodes.length>0) clearCursorRings();
 
   if(last.length>=1){
     showAC(getSuggestions(last));
