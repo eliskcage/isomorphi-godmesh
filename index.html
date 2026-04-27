@@ -122,6 +122,43 @@ body{
 }
 #translate-btn:hover{background:rgba(0,255,170,0.08);border-color:var(--truth);}
 
+/* ── AUTOCOMPLETE ── */
+#autocomplete{
+  position:absolute;bottom:48px;left:240px;
+  background:rgba(8,8,15,0.97);
+  border:1px solid var(--border);
+  display:none;z-index:25;
+  max-width:360px;min-width:200px;
+}
+.ac-item{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 12px;cursor:pointer;
+  font-size:10px;letter-spacing:0.06em;
+  transition:background 0.1s;
+}
+.ac-item:hover,.ac-item.active{background:rgba(255,255,255,0.06);}
+.ac-word{color:rgba(255,255,255,0.8);min-width:70px;}
+.ac-type{font-size:8px;letter-spacing:0.1em;text-transform:uppercase;min-width:45px;}
+.ac-code{color:var(--dim);font-size:9px;margin-left:auto;}
+.ac-sep{width:1px;height:12px;background:var(--border);}
+
+/* ── EMPTY STATE ── */
+#empty-hint{
+  position:absolute;top:50%;left:50%;transform:translate(-30%,-50%);
+  text-align:center;z-index:5;pointer-events:none;
+  transition:opacity 0.5s;
+}
+#empty-hint h2{
+  font-family:'Playfair Display',serif;font-style:italic;
+  font-size:1.2rem;color:rgba(255,255,255,0.08);
+  font-weight:400;margin-bottom:12px;
+}
+#empty-hint p{
+  font-size:9px;letter-spacing:0.1em;
+  color:rgba(255,255,255,0.06);
+  line-height:2;
+}
+
 /* ── LOG ── */
 #logbox{
   position:absolute;top:20px;right:20px;
@@ -222,12 +259,19 @@ body{
 <!-- BOTTOM: language input -->
 <div id="bottom">
   <div id="lang-hint">⬡</div>
-  <input id="lang-input" placeholder="speak in english... &quot;if the user is happy then loop greeting else refuse&quot;" />
+  <input id="lang-input" placeholder="describe your program... head body div button function if else loop" />
   <button id="translate-btn" onclick="translateEnglish()">translate → shapes</button>
 </div>
 
 <div id="logbox"></div>
 <div id="tooltip"></div>
+<div id="autocomplete"></div>
+<div id="empty-hint">
+  <h2>the mesh is empty</h2>
+  <p>type below to describe your program<br>
+  "head body div button function if else loop"<br>
+  no syntax needed — the mesh handles the punctuation</p>
+</div>
 <div id="mode">placing: <span id="mode-type">memory</span></div>
 
 <script>
@@ -258,25 +302,164 @@ const SHAPES = {
   fear:      { color:'#ff7700', sides:4,   label:'GUARD',desc:'Diamond. Guards edges. High refusal threshold.' },
 };
 
-// ── KEYWORD MAP for English translation ──
-const KEYWORD_MAP = [
-  { words:['if','when','check','whether','does','is'],  type:'condition' },
-  { words:['else','otherwise','or','instead','except'], type:'else' },
-  { words:['then','so','therefore','do','run','execute'],type:'then' },
-  { words:['while','loop','repeat','keep','always','until'], type:'loop' },
-  { words:['yes','accept','allow','true','agree','ok'], type:'truth' },
-  { words:['no','refuse','reject','deny','block','stop','never'], type:'lie' },
-  { words:['remember','memory','store','save','recall','know'], type:'memory' },
-  { words:['will','want','intend','choose','decide','drive'], type:'will' },
-  { words:['fear','guard','protect','caution','warn','careful'], type:'fear' },
+// ── KEYWORD MAP — plain English → shape type + code equivalent ──
+// User types "head" and gets <head>. Types "function" and gets a WILL node.
+// No angle brackets, no semicolons, no syntax. The mesh handles the punctuation.
+const VOCAB = [
+  // HTML structure
+  { word:'head',     type:'memory',    code:'<head>' },
+  { word:'body',     type:'then',      code:'<body>' },
+  { word:'div',      type:'memory',    code:'<div>' },
+  { word:'span',     type:'then',      code:'<span>' },
+  { word:'section',  type:'memory',    code:'<section>' },
+  { word:'header',   type:'memory',    code:'<header>' },
+  { word:'footer',   type:'then',      code:'<footer>' },
+  { word:'nav',      type:'loop',      code:'<nav>' },
+  { word:'form',     type:'condition', code:'<form>' },
+  { word:'input',    type:'fear',      code:'<input>' },
+  { word:'button',   type:'will',      code:'<button>' },
+  { word:'link',     type:'then',      code:'<a href>' },
+  { word:'image',    type:'memory',    code:'<img src>' },
+  { word:'list',     type:'loop',      code:'<ul>' },
+  { word:'item',     type:'then',      code:'<li>' },
+  { word:'table',    type:'loop',      code:'<table>' },
+  { word:'row',      type:'then',      code:'<tr>' },
+  { word:'cell',     type:'memory',    code:'<td>' },
+  { word:'title',    type:'memory',    code:'<title>' },
+  { word:'paragraph',type:'then',      code:'<p>' },
+  { word:'script',   type:'will',      code:'<script>' },
+  { word:'style',    type:'memory',    code:'<style>' },
+  { word:'canvas',   type:'will',      code:'<canvas>' },
+  { word:'video',    type:'memory',    code:'<video>' },
+  { word:'audio',    type:'memory',    code:'<audio>' },
+  // JS / programming
+  { word:'function', type:'will',      code:'function(){}' },
+  { word:'variable', type:'memory',    code:'let x' },
+  { word:'let',      type:'memory',    code:'let' },
+  { word:'const',    type:'memory',    code:'const' },
+  { word:'var',      type:'memory',    code:'var' },
+  { word:'class',    type:'loop',      code:'class {}' },
+  { word:'return',   type:'then',      code:'return' },
+  { word:'export',   type:'then',      code:'export' },
+  { word:'import',   type:'memory',    code:'import' },
+  { word:'new',      type:'will',      code:'new' },
+  { word:'this',     type:'fear',      code:'this' },
+  { word:'array',    type:'loop',      code:'[]' },
+  { word:'object',   type:'memory',    code:'{}' },
+  { word:'map',      type:'loop',      code:'.map()' },
+  { word:'filter',   type:'condition', code:'.filter()' },
+  { word:'reduce',   type:'loop',      code:'.reduce()' },
+  { word:'push',     type:'will',      code:'.push()' },
+  { word:'pop',      type:'lie',       code:'.pop()' },
+  { word:'log',      type:'then',      code:'console.log()' },
+  { word:'print',    type:'then',      code:'console.log()' },
+  { word:'alert',    type:'fear',      code:'alert()' },
+  { word:'fetch',    type:'will',      code:'fetch()' },
+  { word:'async',    type:'will',      code:'async' },
+  { word:'await',    type:'fear',      code:'await' },
+  { word:'promise',  type:'will',      code:'new Promise()' },
+  { word:'callback', type:'then',      code:'callback()' },
+  { word:'event',    type:'condition', code:'addEventListener()' },
+  { word:'listener', type:'fear',      code:'addEventListener()' },
+  { word:'timeout',  type:'loop',      code:'setTimeout()' },
+  { word:'interval', type:'loop',      code:'setInterval()' },
+  // Control flow
+  { word:'if',       type:'condition', code:'if(){}' },
+  { word:'when',     type:'condition', code:'if(){}' },
+  { word:'check',    type:'condition', code:'if(){}' },
+  { word:'whether',  type:'condition', code:'if(){}' },
+  { word:'else',     type:'else',      code:'else{}' },
+  { word:'otherwise',type:'else',      code:'else{}' },
+  { word:'instead',  type:'else',      code:'else{}' },
+  { word:'then',     type:'then',      code:'then()' },
+  { word:'so',       type:'then',      code:'then()' },
+  { word:'therefore',type:'then',      code:'then()' },
+  { word:'execute',  type:'then',      code:'exec()' },
+  { word:'run',      type:'then',      code:'run()' },
+  { word:'while',    type:'loop',      code:'while(){}' },
+  { word:'loop',     type:'loop',      code:'for(){}' },
+  { word:'repeat',   type:'loop',      code:'for(){}' },
+  { word:'for',      type:'loop',      code:'for(){}' },
+  { word:'each',     type:'loop',      code:'forEach()' },
+  { word:'until',    type:'loop',      code:'while(){}' },
+  { word:'switch',   type:'condition', code:'switch(){}' },
+  { word:'case',     type:'condition', code:'case:' },
+  { word:'break',    type:'lie',       code:'break' },
+  { word:'continue', type:'will',      code:'continue' },
+  { word:'try',      type:'condition', code:'try{}' },
+  { word:'catch',    type:'fear',      code:'catch(){}' },
+  { word:'throw',    type:'lie',       code:'throw' },
+  { word:'finally',  type:'then',      code:'finally{}' },
+  // State / logic
+  { word:'true',     type:'truth',     code:'true' },
+  { word:'yes',      type:'truth',     code:'true' },
+  { word:'accept',   type:'truth',     code:'resolve()' },
+  { word:'allow',    type:'truth',     code:'true' },
+  { word:'false',    type:'lie',       code:'false' },
+  { word:'no',       type:'lie',       code:'false' },
+  { word:'refuse',   type:'lie',       code:'reject()' },
+  { word:'reject',   type:'lie',       code:'reject()' },
+  { word:'deny',     type:'lie',       code:'false' },
+  { word:'block',    type:'lie',       code:'throw' },
+  { word:'stop',     type:'lie',       code:'return' },
+  { word:'null',     type:'lie',       code:'null' },
+  { word:'undefined',type:'lie',       code:'undefined' },
+  // Intent
+  { word:'remember', type:'memory',    code:'localStorage.set()' },
+  { word:'memory',   type:'memory',    code:'let state = {}' },
+  { word:'store',    type:'memory',    code:'localStorage.set()' },
+  { word:'save',     type:'memory',    code:'save()' },
+  { word:'recall',   type:'memory',    code:'localStorage.get()' },
+  { word:'know',     type:'memory',    code:'state[key]' },
+  { word:'will',     type:'will',      code:'resolve()' },
+  { word:'want',     type:'will',      code:'request()' },
+  { word:'intend',   type:'will',      code:'schedule()' },
+  { word:'choose',   type:'will',      code:'select()' },
+  { word:'decide',   type:'condition', code:'if(){}' },
+  { word:'drive',    type:'will',      code:'dispatch()' },
+  { word:'fear',     type:'fear',      code:'validate()' },
+  { word:'guard',    type:'fear',      code:'guard()' },
+  { word:'protect',  type:'fear',      code:'sanitize()' },
+  { word:'caution',  type:'fear',      code:'warn()' },
+  { word:'warn',     type:'fear',      code:'console.warn()' },
+  // CSS
+  { word:'color',    type:'memory',    code:'color:' },
+  { word:'background',type:'memory',   code:'background:' },
+  { word:'border',   type:'fear',      code:'border:' },
+  { word:'margin',   type:'then',      code:'margin:' },
+  { word:'padding',  type:'then',      code:'padding:' },
+  { word:'flex',     type:'loop',      code:'display:flex' },
+  { word:'grid',     type:'loop',      code:'display:grid' },
+  { word:'position', type:'memory',    code:'position:' },
+  { word:'animate',  type:'loop',      code:'@keyframes' },
+  { word:'transform',type:'will',      code:'transform:' },
+  { word:'transition',type:'loop',     code:'transition:' },
+  { word:'opacity',  type:'memory',    code:'opacity:' },
+  { word:'display',  type:'condition', code:'display:' },
+  { word:'hidden',   type:'lie',       code:'display:none' },
+  { word:'visible',  type:'truth',     code:'visibility:visible' },
 ];
+
+// Build fast lookup + autocomplete index
+const WORD_INDEX = {};
+VOCAB.forEach(v => { WORD_INDEX[v.word] = v; });
+const ALL_WORDS = VOCAB.map(v => v.word).sort();
 
 function wordToType(word){
   const w = word.toLowerCase().replace(/[^a-z]/g,'');
-  for(const k of KEYWORD_MAP){
-    if(k.words.includes(w)) return k.type;
-  }
-  return null;
+  const v = WORD_INDEX[w];
+  return v ? v.type : null;
+}
+
+function wordToVocab(word){
+  const w = word.toLowerCase().replace(/[^a-z]/g,'');
+  return WORD_INDEX[w] || null;
+}
+
+function getSuggestions(partial){
+  const p = partial.toLowerCase().replace(/[^a-z]/g,'');
+  if(p.length < 1) return [];
+  return VOCAB.filter(v => v.word.startsWith(p)).slice(0, 8);
 }
 
 // ── NODE ──
@@ -560,8 +743,9 @@ function clearAll(){
 }
 
 function exportCode(){
-  const ir={version:'v1',nodes:nodes.map(n=>({
+  const ir={version:'v2',nodes:nodes.map(n=>({
     id:n.id,type:n.type,label:n.label,
+    code:n.codeEquiv||null,
     x:n.x|0,y:n.y|0,
     memory_depth:n.memory.length,
     valence:+n.valence.toFixed(2),
@@ -581,28 +765,103 @@ function translateEnglish(){
   const words=text.split(/\s+/);
   const found=[];
   for(const w of words){
-    const t=wordToType(w);
-    if(t) found.push({word:w,type:t});
+    const v=wordToVocab(w);
+    if(v) found.push(v);
   }
   if(!found.length){
-    addLog('no shapes found in text','r'); return;
+    addLog('no recognized keywords — try: head body div function if else loop','r'); return;
   }
-  // Place found shapes in an arc
+  hideEmpty();
   const cx=W/2+100, cy=H/2;
-  const arc=Math.min(300, found.length*60);
+  const arc=Math.min(350, found.length*55);
   found.forEach((f,i)=>{
     const a=-Math.PI/2 + i*(Math.PI/(Math.max(1,found.length-1)));
-    const r=arc*(0.5+found.length*0.05);
+    const r=arc*(0.4+found.length*0.04);
     const x=cx+Math.cos(a)*r + (Math.random()-0.5)*30;
     const y=cy+Math.sin(a)*r*0.6 + (Math.random()-0.5)*30;
-    setTimeout(()=>addNode(x,y,f.type,f.word.slice(0,6).toUpperCase()), i*120);
+    setTimeout(()=>{
+      const n=addNode(x,y,f.type,f.word.toUpperCase().slice(0,6));
+      n.codeEquiv=f.code;
+      addLog(`${f.word} → ${f.code}`,'g');
+    }, i*100);
   });
   addLog(`"${text.slice(0,40)}" → ${found.length} shapes`,'g');
   input.value='';
+  hideAC();
 }
 
-document.getElementById('lang-input').addEventListener('keydown',e=>{
-  if(e.key==='Enter') translateEnglish();
+function hideEmpty(){
+  const el=document.getElementById('empty-hint');
+  if(el) el.style.opacity='0';
+  setTimeout(()=>{if(el)el.style.display='none';},500);
+}
+
+// ── AUTOCOMPLETE ──
+const acBox=document.getElementById('autocomplete');
+let acItems=[], acIdx=-1;
+
+function showAC(suggestions){
+  if(!suggestions.length){acBox.style.display='none';return;}
+  acIdx=-1;
+  acItems=suggestions;
+  acBox.innerHTML=suggestions.map((s,i)=>{
+    const col=SHAPES[s.type].color;
+    return `<div class="ac-item" data-i="${i}" onmousedown="pickAC(${i})">
+      <span class="ac-word">${s.word}</span>
+      <span class="ac-sep"></span>
+      <span class="ac-type" style="color:${col}">${SHAPES[s.type].label}</span>
+      <span class="ac-code">${s.code}</span>
+    </div>`;
+  }).join('');
+  acBox.style.display='block';
+}
+
+function hideAC(){acBox.style.display='none';acItems=[];acIdx=-1;}
+
+function pickAC(i){
+  const input=document.getElementById('lang-input');
+  const words=input.value.split(/\s+/);
+  words[words.length-1]=acItems[i].word;
+  input.value=words.join(' ')+' ';
+  hideAC();
+  input.focus();
+}
+
+function highlightAC(idx){
+  acBox.querySelectorAll('.ac-item').forEach((el,i)=>{
+    el.classList.toggle('active',i===idx);
+  });
+}
+
+const langInput=document.getElementById('lang-input');
+langInput.addEventListener('input',e=>{
+  const words=e.target.value.split(/\s+/);
+  const last=words[words.length-1];
+  if(last.length>=1){
+    showAC(getSuggestions(last));
+  } else {
+    hideAC();
+  }
+});
+
+langInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(acIdx>=0 && acItems.length){pickAC(acIdx);e.preventDefault();return;}
+    translateEnglish();e.preventDefault();
+  } else if(e.key==='ArrowDown' && acItems.length){
+    e.preventDefault();
+    acIdx=Math.min(acIdx+1,acItems.length-1);
+    highlightAC(acIdx);
+  } else if(e.key==='ArrowUp' && acItems.length){
+    e.preventDefault();
+    acIdx=Math.max(acIdx-1,0);
+    highlightAC(acIdx);
+  } else if(e.key==='Tab' && acItems.length){
+    e.preventDefault();
+    pickAC(acIdx>=0?acIdx:0);
+  } else if(e.key==='Escape'){
+    hideAC();
+  }
 });
 
 // ── INTERACTION ──
@@ -647,6 +906,7 @@ canvas.addEventListener('mousedown',e=>{
     // Place new node
     if(connecting){ connecting.selected=false; connecting=null; return; }
     addNode(e.clientX,e.clientY,currentTool);
+    hideEmpty();
   }
 });
 
@@ -666,7 +926,8 @@ canvas.addEventListener('mousemove',e=>{
     tooltip.style.display='block';
     tooltip.style.left=(e.clientX+18)+'px';
     tooltip.style.top=(e.clientY-10)+'px';
-    tooltip.innerHTML=`<b style="color:${hit.color}">[${hit.label}]</b> 0x${hit.id}<br>
+    const codeStr=hit.codeEquiv?`<br><span style="color:var(--truth)">→ ${hit.codeEquiv}</span>`:'';
+    tooltip.innerHTML=`<b style="color:${hit.color}">[${hit.label}]</b> 0x${hit.id}${codeStr}<br>
       type: ${hit.type}<br>
       valence: ${hit.valence.toFixed(2)}<br>
       freewill: ${hit.freewill.toFixed(2)}<br>
@@ -744,15 +1005,6 @@ function draw(){
   maybeFire();
   requestAnimationFrame(draw);
 }
-
-// Seed a small starter mesh
-setTimeout(()=>{
-  addNode(W/2-80, H/2-40,'condition','IF');
-  addNode(W/2+80, H/2-80,'then','THEN');
-  addNode(W/2+80, H/2+60,'else','ELSE');
-  addNode(W/2-200, H/2,'memory','MEM');
-  addNode(W/2, H/2+120,'loop','LOOP');
-},200);
 
 draw();
 </script>
